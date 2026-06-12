@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 사용자 모델
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  nickname  String     @unique
+  password  String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // 관계
+  games     Game[]
+  scores    Score[]
+
+  @@map("users")
+}
+
+// 선수 모델 (30명)
+model Player {
+  id        String     @id @default(cuid())
+  name      String     @unique // 알파벳 랜덤 조합
+  position  String     // 포지션 (예: "DH", "OF", "SS" 등)
+  avatarColor String   // UI에서 구분하기 위한 색상
+  createdAt DateTime   @default(now())
+
+  // 관계
+  games     Game[]
+
+  @@map("players")
+}
+
+// 게임 세션
+model Game {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerId        String
+  player          Player     @relation(fields: [playerId], references: [id])
+  
+  // 게임 결과
+  totalScore      Int        @default(0)
+  pitchesThrown   Int        @default(0) // 던져진 공의 개수
+  hitCount        Int        @default(0) // 맞힌 횟수
+  
+  // 각 타격 결과 (JSON으로 저장하여 상세 정보 유지)
+  swings          SwingResult[]
+  
+  startedAt       DateTime   @default(now())
+  endedAt         DateTime?
+  
+  @@map("games")
+}
+
+// 각 타격 결과
+model SwingResult {
+  id              String     @id @default(cuid())
+  gameId          String
+  game            Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  // 투구 정보
+  pitchType       String     // "fastball", "fork", "slider", "changeup"
+  pitchZoneX      Float      // 스트라이크 존 내 X좌표 (-0.5 ~ 0.5)
+  pitchZoneY      Float      // 스트라이크 존 내 Y좌표 (0.5 ~ 1.5)
+  
+  // 유저 타격 정보
+  hitZoneX        Float?     // 사용자가 친 위치 X좌표
+  hitZoneY        Float?     // 사용자가 친 위치 Y좌표
+  isHit           Boolean    // 공을 쳤는가
+  
+  // 타구 정보
+  flyDistance     Float?     // 비거리 (미터)
+  launchAngle     Float?     // 발사각 (도)
+  score           Int        @default(0) // 이 타격의 점수
+  
+  createdAt       DateTime   @default(now())
+  
+  @@map("swing_results")
+}
+
+// 게임 점수 기록 (일일/전체)
+model Score {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // 점수 정보
+  totalScore      Int        // 누적 점수
+  gameCount       Int        // 플레이 횟수
+  bestScore       Int        // 최고 점수
+  averageScore    Float      // 평균 점수
+  
+  // 일일 기회 관리
+  dailyAttempts   Int        @default(5) // 오늘 남은 기회
+  lastResetAt     DateTime   @default(now()) // 마지막 리셋 시간
+  
+  // 시간별 기회 회복
+  lastAttemptUsedAt DateTime? // 마지막 기회를 사용한 시간
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  @@unique([userId])
+  @@map("scores")
+}
+
+// 리더보드 (캐시용, 주기적으로 업데이트)
+model Leaderboard {
+  id              String     @id @default(cuid())
+  userId          String
+  userNickname    String
+  
+  rank            Int
+  totalScore      Int
+  gameCount       Int
+  bestScore       Int
+  averageScore    Float
+  
+  updatedAt       DateTime   @default(now()) @updatedAt
+  
+  @@unique([userId])
+  @@map("leaderboards")
+}
